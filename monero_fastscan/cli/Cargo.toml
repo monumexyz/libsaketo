@@ -1,0 +1,11 @@
+[package]
+name = "monero_fastscan_cli"
+version = "0.1.0"
+edition = "2024"
+description = "A CLI app for monero_fastscan that scans a Monero wallet for inputs/outputs"
+publish = false
+
+[dependencies]
+hex = "0.4.3"
+tokio = { version = "1.47.1", features = ["rt", "rt-multi-thread", "macros"] }
+monero_fastscan = { path = "../" }

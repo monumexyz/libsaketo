@@ -1,14 +1,6 @@
-[package]
-name = "monero_fastsync"
-version = "0.1.0"
-edition = "2021"
-authors = ["detherminal"]
-description = "Monero FastSync CLI PoC for the development of Saketo (saketo.io)"
-license = "MIT"
-keywords = ["monero", "fastsync", "cli"]
-
-[dependencies]
-hex = "0.4.3"
-reqwest = { version = "0.12.15", features = ["blocking", "json"] }
-serde = { version = "1.0.219", features = ["derive"] }
-serde_json = "1.0.140"
+[workspace]
+resolver = "3"
+members = [
+    "monero_fastscan",
+    "monero_fastscan/cli"
+]

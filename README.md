@@ -1,5 +1,6 @@
-# Monero FastSync
+# libsaketo
 
-This crate is designed to be PoC for a fast wallet sync (decoding outputs and checking key images) implementation for [Saketo](https://saketo.io). Takes private spend key and block height from the user via CLI and starts scanning the chain, and displaying outputs that are spendable by the given key. It also checks for key images to see if they are already spent.
+libsaketo is a collection of crates in Rust for the monero ecosystem. Mainly designated for the compatibility with [Saketo wallet](https://saketo.io). Includes crates:
 
-To use, clone the repo and run the project via CLI. You will see what's next.
+- [`monero_fastscan`](/monero_fastscan): A simple, fast and async block scanner for Monero chain.
+- [`monero_fastscan_cli`](/monero_fastscan/cli): A command line interface for `monero_fastscan`.
