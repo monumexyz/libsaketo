@@ -1,6 +1,7 @@
 [workspace]
 resolver = "3"
 members = [
-    "monero_fastscan",
-    "monero_fastscan/cli"
+    "ffi",
+    "fastscan",
+    "fastscan/cli"
 ]

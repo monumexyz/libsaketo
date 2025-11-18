@@ -1,8 +1,10 @@
 [package]
 name = "monero_fastscan"
-version = "0.1.0"
+version = "0.0.1"
 edition = "2024"
+authors = ["detherminal"]
 description = "A fast and async Monero wallet scanner library"
+exclude = ["cli/*"]
 
 [dependencies]
 tokio = { version = "1.47.1", features = ["macros"] }
