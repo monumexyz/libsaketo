@@ -7,17 +7,18 @@ use monero_wallet::generators::biased_hash_to_point;
 use monero_wallet::primitives::keccak256;
 use monero_wallet::{Scanner, ViewPair};
 use monero_wallet::rpc::ScannableBlock;
+use serde::Serialize;
 use tokio::sync::{mpsc, oneshot};
 use zeroize::Zeroizing;
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct ScannedInput {
     pub height: u64,
     pub key_image: [u8; 32],
     pub amount: u64,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub struct ScannedOutput {
     pub height: u64,
     pub key_image: [u8; 32],
@@ -31,6 +32,7 @@ pub enum ServiceCommand {
     Transactions,
 }
 
+#[derive(Serialize)]
 pub enum ServiceResponse {
     Started,
     Stopped,
@@ -39,7 +41,7 @@ pub enum ServiceResponse {
     Error(String),
 }
 
-#[derive(Clone)]
+#[derive(Clone, Serialize)]
 pub enum ServiceStatus {
     Scanning,
     NotScanning,

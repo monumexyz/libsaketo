@@ -111,3 +111,21 @@ pub extern "C" fn get_primary_address_monero_seed(mnemonic: *const c_char) -> *m
     let address = monero_wallet::address::MoneroAddress::new(Network::Mainnet, AddressType::Legacy, pub_spend, pub_view);
     CString::new(address.to_string()).unwrap().into_raw()
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn get_hex_priv_spend_monero_seed(mnemonic: *const c_char) -> *mut c_char {
+    let mnemonic = unsafe { CStr::from_ptr(mnemonic) }.to_str().unwrap_or("").to_string();
+    let seed = monero_seed::Seed::from_string(monero_seed::Language::English, Zeroizing::new(mnemonic)).unwrap();
+    let priv_spend = Scalar::from_bytes_mod_order(*seed.entropy()).to_bytes();
+    let hex_priv_spend = hex::encode(priv_spend);
+    CString::new(hex_priv_spend).unwrap().into_raw()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn get_hex_priv_spend_polyseed(mnemonic: *const c_char) -> *mut c_char {
+    let mnemonic = unsafe { CStr::from_ptr(mnemonic) }.to_str().unwrap_or("").to_string();
+    let seed = polyseed::Polyseed::from_string(polyseed::Language::English, Zeroizing::new(mnemonic)).unwrap();
+    let priv_spend = Scalar::from_bytes_mod_order(*seed.key()).to_bytes();
+    let hex_priv_spend = hex::encode(priv_spend);
+    CString::new(hex_priv_spend).unwrap().into_raw()
+}

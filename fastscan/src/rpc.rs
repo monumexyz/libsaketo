@@ -31,7 +31,7 @@ impl FastscanRpc {
         url = if url.starts_with("https://") || url.starts_with("http://") {
             format!("{}:{}", url, port)
         } else {
-            format!("https://{}:{}", url, port)
+            format!("http://{}:{}", url, port)
         };
         let oxide_rpc = SimpleRequestRpc::new(url.clone()).await;
         let oxide_rpc = match oxide_rpc {

@@ -5,3 +5,6 @@ members = [
     "fastscan",
     "fastscan/cli"
 ]
+
+[patch.crates-io]
+simple-request = { path = "ffi/patches/simple-request" }
