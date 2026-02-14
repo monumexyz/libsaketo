@@ -1,6 +1,7 @@
-use monero_fastscan::service::{FastscanService, ServiceCommand, ServiceResponse, ServiceStatus};
+use monero_fastscan::service::{FastscanService, ServiceCommand, ServiceNotification, ServiceResponse, ServiceStatus};
 use std::io::{stdin, stdout, Write};
 use tokio::sync::{mpsc, oneshot};
+use monero_fastscan::service::ServiceCommand::Start;
 
 #[tokio::main]
 async fn main() {
@@ -79,6 +80,16 @@ DO YOU UNDERSTAND AND ACCEPT THESE RISKS? IF SO, ACKNOWLEDGE BY TYPING 'YES, I U
         input.trim().to_string()
     };
 
+    // Want to use notification channel?
+    let mut input = String::new();
+    print!("Do you want to enable notification channel mode (this will result in getting updates everytime a transaction is found)? (y/N): ");
+    stdout().flush().expect("Failed to flush stdout");
+    stdin().read_line(&mut input).expect("Failed to read line");
+    let enable_notification_channel = match input.trim().to_lowercase().as_str() {
+        "y" | "yes" | "Y" => true,
+        _ => false,
+    };
+
     // Split rpc_url into base url and port
     let parts = rpc_url.split(':').collect::<Vec<&str>>();
     let mut rpc_url = String::from("https://monero.stackwallet.com".to_string());
@@ -89,7 +100,21 @@ DO YOU UNDERSTAND AND ACCEPT THESE RISKS? IF SO, ACKNOWLEDGE BY TYPING 'YES, I U
     }
 
     let (tx, rx) = mpsc::channel(2);
-    let service = match FastscanService::new(priv_spend, block_height, rpc_url, port,200).await {
+    let mut notify_channel = None;
+    if enable_notification_channel {
+        let (notify_tx, mut notify_rx) = mpsc::channel::<monero_fastscan::service::ServiceNotification>(100);
+        notify_channel = Some(notify_tx);
+        tokio::spawn(async move {
+            while let Some(notification) = notify_rx.recv().await {
+                match notification {
+                    ServiceNotification::FoundTransaction => {
+                        println!("Notification: Found a matching transaction!");
+                    }
+                }
+            }
+        });
+    }
+    let service = match FastscanService::new(priv_spend, block_height, None, None, rpc_url, port,200, notify_channel).await {
         Ok(s) => s,
         Err(e) => {
             println!("Failed to create service: {}", e);
@@ -97,77 +122,92 @@ DO YOU UNDERSTAND AND ACCEPT THESE RISKS? IF SO, ACKNOWLEDGE BY TYPING 'YES, I U
         }
     };
     tokio::spawn(service.run(rx));
-    let commands = "---\nCommands:\nh, help - Show this help message\ns, status - Show current height\nt, transactions - Show transactions\nstart - Start scanning\nstop - Stop scanning\n---";
-    println!("{}", commands);
-    println!("Current status: Stopped. Type 'start' to begin scanning.\n---");
-    loop {
-        print!("> ");
-        stdout().flush().unwrap(); // flush prompt
-        let mut line = String::new();
-        if stdin().read_line(&mut line).is_err() {
-            break;
+    if enable_notification_channel {
+        let (resp_tx, _resp_rx) = oneshot::channel();
+        if tx.send((Start, resp_tx)).await.is_err() {
+            println!("Service stopped.");
+            return;
         }
-        let line = line.trim().to_string();
-        if line.is_empty() {
-            continue;
-        }
-        let (resp_tx, resp_rx) = oneshot::channel();
-        if line == "h" || line == "help" {
-            println!("{}", commands);
-            continue;
-        }
-        let command = match line.as_str() {
-            "s" | "status" => ServiceCommand::Status,
-            "t" | "transactions" => ServiceCommand::Transactions,
-            "start" => ServiceCommand::Start,
-            "stop" => ServiceCommand::Stop,
-            _ => {
-                println!("Unknown command. Type 'h' or 'help' for a list of commands.");
+        println!("Notification channel enabled and the service has started. You will receive updates when blocks are scanned.");
+        loop {}
+    } else {
+        let commands = "---\nCommands:\nh, help - Show this help message\ns, status - Show current height\nt, transactions - Show transactions\nstart - Start scanning\nstop - Stop scanning\nexit, quit - Exit the CLI\n---";
+        println!("{}", commands);
+        println!("Current status: Stopped. Type 'start' to begin scanning.\n---");
+        loop {
+            print!("> ");
+            stdout().flush().unwrap(); // flush prompt
+            let mut line = String::new();
+            if stdin().read_line(&mut line).is_err() {
+                break;
+            }
+            let line = line.trim().to_string();
+            if line.is_empty() {
                 continue;
             }
-        };
-        if tx.send((command, resp_tx)).await.is_err() {
-            println!("Service stopped.");
-            break;
-        }
-        if let Ok(response) = resp_rx.await {
-            match response {
-                ServiceResponse::Status(status, height) => {
-                    match status {
-                        ServiceStatus::Scanning => println!("Scanning. Current height: {}", height),
-                        ServiceStatus::NotScanning => println!("Stopped (not scanning). Last scanned height: {}", height),
-                        ServiceStatus::Scanned => println!("Service is synced with the chain. Last scanned height: {}", height),
-                        ServiceStatus::Error(err) => println!("Service gave error: {}", err),
-                    }
+            let (resp_tx, resp_rx) = oneshot::channel();
+            if line == "h" || line == "help" {
+                println!("{}", commands);
+                continue;
+            }
+            let command = match line.as_str() {
+                "s" | "status" => ServiceCommand::Status,
+                "t" | "transactions" => ServiceCommand::Transactions,
+                "start" => ServiceCommand::Start,
+                "stop" => ServiceCommand::Stop,
+                "exit" | "quit" => {
+                    println!("Exiting...");
+                    break;
                 }
-                ServiceResponse::Transactions(inputs, outputs ) => {
-                    if inputs.is_empty() && outputs.is_empty() {
-                        println!("No transactions found.");
-                        continue;
-                    } else {
-                        if !outputs.is_empty() {
-                            println!("--- Incoming Outputs ---");
-                            for output in outputs {
-                                println!("{}", &format!("Height: {}, Amount: {}, Key Image: {}", output.height, output.amount, hex::encode(output.key_image)));
-                            }
+                _ => {
+                    println!("Unknown command. Type 'h' or 'help' for a list of commands.");
+                    continue;
+                }
+            };
+            if tx.send((command, resp_tx)).await.is_err() {
+                println!("Service stopped.");
+                break;
+            }
+            if let Ok(response) = resp_rx.await {
+                match response {
+                    ServiceResponse::Status(status, height) => {
+                        match status {
+                            ServiceStatus::Scanning => println!("Scanning. Current height: {}", height),
+                            ServiceStatus::NotScanning => println!("Stopped (not scanning). Last scanned height: {}", height),
+                            ServiceStatus::Scanned => println!("Service is synced with the chain. Last scanned height: {}", height),
+                            ServiceStatus::Error(err) => println!("Service gave error: {}", err),
                         }
-                        if !inputs.is_empty() {
-                            println!("--- Spent Outputs ---");
-                            for input in inputs {
-                                println!("{}", &format!("Height: {}, Amount: {}, Key Image: {}", input.height, input.amount, hex::encode(input.key_image)));
-                            }
-                        }
-                        println!("------------------------");
                     }
-                }
-                ServiceResponse::Error(err) => {
-                    println!("Error: {}", err);
-                }
-                ServiceResponse::Started => {
-                    println!("Service started.");
-                }
-                ServiceResponse::Stopped => {
-                    println!("Service stopped.");
+                    ServiceResponse::Transactions(inputs, outputs) => {
+                        if inputs.is_empty() && outputs.is_empty() {
+                            println!("No transactions found.");
+                            continue;
+                        } else {
+                            if !outputs.is_empty() {
+                                println!("--- Incoming Outputs ---");
+                                for output in outputs {
+                                    println!("{}", &format!("Height: {}, Amount: {}, Key Image: {}", output.height, output.amount, hex::encode(output.key_image)));
+                                }
+                            }
+                            if !inputs.is_empty() {
+                                println!("--- Spent Outputs ---");
+                                for input in inputs {
+                                    println!("{}", &format!("Height: {}, Amount: {}, Key Image: {}", input.height, input.amount, hex::encode(input.key_image)));
+                                }
+                            }
+                            println!("------------------------");
+                        }
+                    }
+                    ServiceResponse::Data { status: _, height: _, inputs: _, outputs: _ } => {}
+                    ServiceResponse::Error(err) => {
+                        println!("Error: {}", err);
+                    }
+                    ServiceResponse::Started => {
+                        println!("Service started.");
+                    }
+                    ServiceResponse::Stopped => {
+                        println!("Service stopped.");
+                    }
                 }
             }
         }
